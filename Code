@@ -1,0 +1,330 @@
+library(GEOquery)
+library(stringr)
+library(dplyr)
+library(ggplot2)
+library(pROC)
+library(caret)
+setwd("~/R/GEO_count/BRD9")
+#read gene covertion
+gene_name<-read.delim("probeMap_gencode.v23.annotation.gene.probemap",sep="\t",quote="",header = T)
+gene_name<-gene_name[!duplicated(gene_name$gene),]
+##############read exp##############
+TCGA_exp<-read.delim("tcga_RSEM_gene_tpm",sep="\t",quote="",header = T)
+# TCGA_test<-TCGA_exp[,c(1:100)]
+#TCGA_test<-merge(gene_name[,c("id","gene")],TCGA_test,by.x="id",by.y="sample")
+TCGA_exp<-merge(gene_name[,c("id","gene")],TCGA_exp,by.x="id",by.y="sample")
+TCGA_exp<-TCGA_exp[,-1]
+rownames(TCGA_exp)<-TCGA_exp$gene
+TCGA_exp<-TCGA_exp[,-1]
+TCGA_exp<-t(TCGA_exp)
+
+
+#read sample
+TCGA_sample<-read.delim("Survival_SupplementalTable_S1_20171025_xena_sp.txt",sep="\t",quote="",header = T)
+TCGA_sample$sample<-gsub("-",".",TCGA_sample$sample)
+TCGA_sample$group<-""
+TCGA_sample[grepl(".11",TCGA_sample$sample),]$group<-"normal"
+TCGA_sample[grepl(".01",TCGA_sample$sample),]$group<-"tumor"
+table(TCGA_sample$group)
+TCGA_sample<-TCGA_sample[TCGA_sample$group %in% c("normal","tumor"),]
+
+
+#get category
+TCGA_CHOL<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="CHOL"),]$sample,]
+TCGA_COAD<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="COAD"),]$sample,]
+TCGA_ESCA<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="ESCA"),]$sample,]
+TCGA_HNSC<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="HNSC"),]$sample,]
+TCGA_KIRC<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="KIRC"),]$sample,]
+TCGA_KIRP<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="KIRP"),]$sample,]
+TCGA_LIHC<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="LIHC"),]$sample,]
+TCGA_LUAD<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="LUAD"),]$sample,]
+TCGA_LUSC<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="LUSC"),]$sample,]
+TCGA_READ<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="READ"),]$sample,]
+TCGA_STAD<-TCGA_exp[rownames(TCGA_exp) %in% TCGA_sample[(TCGA_sample$cancer.type.abbreviation=="STAD"),]$sample,]
+
+
+#get group
+TCGA_CHOL<-merge(TCGA_sample[,c("sample","group")],TCGA_CHOL,by.x="sample",by.y="row.names")
+TCGA_COAD<-merge(TCGA_sample[,c("sample","group")],TCGA_COAD,by.x="sample",by.y="row.names")
+TCGA_ESCA<-merge(TCGA_sample[,c("sample","group")],TCGA_ESCA,by.x="sample",by.y="row.names")
+TCGA_HNSC<-merge(TCGA_sample[,c("sample","group")],TCGA_HNSC,by.x="sample",by.y="row.names")
+TCGA_KIRC<-merge(TCGA_sample[,c("sample","group")],TCGA_KIRC,by.x="sample",by.y="row.names")
+TCGA_KIRP<-merge(TCGA_sample[,c("sample","group")],TCGA_KIRP,by.x="sample",by.y="row.names")
+TCGA_LIHC<-merge(TCGA_sample[,c("sample","group")],TCGA_LIHC,by.x="sample",by.y="row.names")
+TCGA_LUAD<-merge(TCGA_sample[,c("sample","group")],TCGA_LUAD,by.x="sample",by.y="row.names")
+TCGA_LUSC<-merge(TCGA_sample[,c("sample","group")],TCGA_LUSC,by.x="sample",by.y="row.names")
+TCGA_READ<-merge(TCGA_sample[,c("sample","group")],TCGA_READ,by.x="sample",by.y="row.names")
+TCGA_STAD<-merge(TCGA_sample[,c("sample","group")],TCGA_STAD,by.x="sample",by.y="row.names")
+
+
+
+
+##################read gtex exp####################
+gtex<-read.delim("gtex_RSEM_gene_tpm",sep="\t",quote="",header = T)
+gtex<-merge(gene_name[,c("id","gene")],gtex,by.x="id",by.y="sample")
+gtex<-gtex[,-1]
+rownames(gtex)<-gtex$gene
+gtex<-gtex[,-1]
+gtex<-t(gtex)
+
+
+#read gtex sample
+gtex_sample<-read.delim("GTEX_phenotype",sep="\t",quote="",header = T)
+gtex_sample$Sample<-gsub("-",".",gtex_sample$Sample)
+
+# <not provided>  Adipose Tissue   Adrenal Gland         Bladder           Blood    Blood Vessel     Bone Marrow        Brain 
+# 5                     621             161              13             595             753             102            1426 
+# Breast    Cervix Uteri           Colon       Esophagus  Fallopian Tube           Heart          Kidney           Liver 
+# 221              11             384             805               7             493              38             141 
+# Lung          Muscle           Nerve           Ovary        Pancreas       Pituitary        Prostate  Salivary Gland 
+# 381             478             335             112             203             126             122              71 
+# Skin Small Intestine          Spleen         Stomach          Testis         Thyroid          Uterus          Vagina 
+# 977             106             121             209             208             366              93              99 
+
+#get the exp and group
+COAD_READ_normal<-as.data.frame(gtex[rownames(gtex) %in% gtex_sample[gtex_sample$X_primary_site=="Colon",]$Sample,])
+COAD_READ_normal$group<-"normal"
+COAD_READ_normal$sample<-rownames(COAD_READ_normal)
+
+ESCA_normal<-as.data.frame(gtex[rownames(gtex) %in% gtex_sample[gtex_sample$X_primary_site=="Esophagus",]$Sample,])
+ESCA_normal$group<-"normal"
+ESCA_normal$sample<-rownames(ESCA_normal)
+
+KIRC_KIRP_normal<-as.data.frame(gtex[rownames(gtex) %in% gtex_sample[gtex_sample$X_primary_site=="Kidney",]$Sample,])
+KIRC_KIRP_normal$group<-"normal"
+KIRC_KIRP_normal$sample<-rownames(KIRC_KIRP_normal)
+
+LIHC_normal<-as.data.frame(gtex[rownames(gtex) %in% gtex_sample[gtex_sample$X_primary_site=="Liver",]$Sample,])
+LIHC_normal$group<-"normal"
+LIHC_normal$sample<-rownames(LIHC_normal)
+
+LUAD_LUSC_normal<-as.data.frame(gtex[rownames(gtex) %in% gtex_sample[gtex_sample$X_primary_site=="Lung",]$Sample,])
+LUAD_LUSC_normal$group<-"normal"
+LUAD_LUSC_normal$sample<-rownames(LUAD_LUSC_normal)
+
+STAD_normal<-as.data.frame(gtex[rownames(gtex) %in% gtex_sample[gtex_sample$X_primary_site=="Stomach",]$Sample,])
+STAD_normal$group<-"normal"
+STAD_normal$sample<-rownames(STAD_normal)
+
+#combine TCGA and gtex
+COAD<-rbind(TCGA_COAD,COAD_READ_normal)
+table(COAD$group)#348    287 
+
+ESCA<-rbind(TCGA_ESCA,ESCA_normal)
+table(ESCA$group)#666    181 
+
+KIRC<-rbind(TCGA_KIRC,KIRC_KIRP_normal)
+table(KIRC$group)#99    531 
+
+KIRP<-rbind(TCGA_KIRP,KIRC_KIRP_normal)
+table(KIRP$group) #60    288 
+
+LIHC<-rbind(TCGA_LIHC,LIHC_normal)
+table(LIHC$group)#160    369 
+
+LUAD<-rbind(TCGA_LUAD,LUAD_LUSC_normal)
+table(LUAD$group)#347    513 
+
+LUSC<-rbind(TCGA_LUSC,LUAD_LUSC_normal)
+table(LUSC$group)#337    499  
+
+READ<-rbind(TCGA_READ,COAD_READ_normal)
+table(READ$group)#318     91 
+
+STAD<-rbind(TCGA_STAD,STAD_normal)
+table(STAD$group)# 210    414 
+
+############load microarray data#############
+gset <- getGEO(filename="~/R/GEO_count/BRD9/GSE27262_series_matrix.txt.gz", AnnotGPL = FALSE)
+dim(exprs(gset))
+
+sample_information<-pData(gset) ## print the sample information
+sample_information<-sample_information[,c("geo_accession","source_name_ch1")]
+sample_information$group<-""
+sample_information[grepl("N",sample_information$source_name_ch1),]$group<-"normal"
+sample_information[grepl("T",sample_information$source_name_ch1),]$group<-"tumor"
+
+#get the gene annotation
+anno<-fData(gset) 
+anno<-anno[,c("ID","Gene Symbol")]
+#anno<-toTable(hgu133plus2SYMBOL)
+colnames(anno)[1]<-"Gene"
+
+#get exp from microarray
+ex<-exprs(gset)## print the expression data
+#ex<-ex[,colnames(ex) %in% sample_information$geo_accession]
+summary(ex)
+log_ex<-log2(ex)
+boxplot(log_ex,outline=FALSE)
+#differential expression
+design<-model.matrix(~0+sample_information$group)
+colnames(design) <- c("Normal","Tumour")
+## calculate median expression level
+cutoff <- median(ex)
+## TRUE or FALSE for whether each gene is "expressed" in each sample
+is_expressed <- ex > cutoff
+## Identify genes expressed in more than 2 samples
+keep <- rowSums(is_expressed) > 2
+## check how many genes are removed / retained.
+table(keep)
+
+## subset to just those expressed genes
+gset <- gset[keep,]
+ex2<-exprs(gset)
+#change probe into gene name
+ex2<-merge(anno,ex2,by.x="Gene",by.y="row.names")
+ex2<-ex2[!duplicated(ex2$`Gene Symbol`),]
+rownames(ex2)<-ex2$`Gene Symbol`
+ex2<-ex2[,-c(1:2)]
+
+####################remove batch effect###############
+
+LUAD_sample<-data.frame(sample=TCGA_LUAD$sample,group=TCGA_LUAD$group)
+LUAD_sample$batch<-"TCGA"
+ex2_sample<-data.frame(sample=sample_information$geo_accession,group=sample_information$group)
+ex2_sample$batch<-"microrarray"
+allsample<-rbind(LUAD_sample,ex2_sample)
+
+LUAD_pca<-TCGA_LUAD[,-c(2)]
+rownames(LUAD_pca)<-LUAD_pca$sample
+LUAD_pca<-LUAD_pca[,-1]
+LUAD_pca<-t(LUAD_pca)
+all_ex<-merge(LUAD_pca,ex2,by="row.names")
+rownames(all_ex)<-all_ex$Row.names
+all_ex<-all_ex[,-1]
+
+pc<-prcomp(t(all_ex),center=T,scale=T)
+print(pc)
+plot(pc)
+
+pc_results<-data.frame(pc$x[,1:2],stringsAsFactors = F,group=allsample$batch)
+
+pca_plot1<-ggplot(pc_results,aes(x=PC1,y=PC2,color=group)) +
+  geom_point(shape=19) +
+  stat_ellipse(geom = "polygon", alpha = 0.1) + #add a circle
+  xlab("PC1") +
+  ylab("PC2") +
+  labs(title=bquote(bold("PCA Plot For all Datasets")))+
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(legend.position = "top")+
+  geom_vline(xintercept = 0,linetype="dashed")+
+  geom_hline(yintercept = 0,linetype = "dashed")+
+  theme(axis.title.x = element_text(face = "bold", size = 11))+
+  theme(axis.title.y = element_text(face = "bold", size = 11))
+pca_plot1
+
+#remove batch effect
+limma_rm<-removeBatchEffect(all_ex,batch=allsample$batch) 
+limma.data<-t(limma_rm)
+limma_matrix<-apply(limma.data, 2,as.numeric)
+#boxplot(limma_rm)
+any(is.na(limma_matrix))
+scaled_limma<-scale(limma_matrix)
+pc<-prcomp(limma.data,center=T,scale=T)
+
+print(pc)
+plot(pc)
+
+pc_results<-data.frame(pc$x[,1:2],stringsAsFactors = F,group=allsample$batch)
+pca_plot2<-ggplot(pc_results,aes(x=PC1,y=PC2,color=group)) +
+  geom_point(shape=19) +
+  stat_ellipse(geom = "polygon", alpha = 0.1) + #add a circle
+  xlab("PC1") +
+  ylab("PC2") +
+  labs(title=bquote(bold("PCA Plot For all Datasets")))+
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(legend.position = "top")+
+  geom_vline(xintercept = 0,linetype="dashed")+
+  geom_hline(yintercept = 0,linetype = "dashed")+
+  theme(axis.title.x = element_text(face = "bold", size = 11))+
+  theme(axis.title.y = element_text(face = "bold", size = 11))
+pca_plot2
+
+
+#extract BRD9
+limma_BRD9<-as.data.frame(limma_rm[rownames(limma_rm) %in% "BRD9",])
+colnames(limma_BRD9)<-"BRD9"
+#training
+LUAD_BRD9<-merge(LUAD_sample[,c("sample","group")],limma_BRD9,by.x="sample",by.y="row.names")
+LUAD_BRD9$group<-as.factor(LUAD_BRD9$group)
+#validation
+micro_BRD9<-merge(ex2_sample[,c("sample","group")],limma_BRD9,by.x="sample",by.y="row.names")
+micro_BRD9$group<-as.factor(micro_BRD9$group)
+
+###############logistisc regression###############
+
+set.seed(123)
+
+train_normal<-LUAD_BRD9[LUAD_BRD9$group=="normal",]
+train_tumor<-LUAD_BRD9[LUAD_BRD9$group=="tumor",]
+tumor_subgroups<-split(train_tumor,sample(1:10,nrow(train_tumor),replace=T))
+
+new_datasets <- lapply(tumor_subgroups, function(subgroup) {
+  rbind(subgroup, train_normal)
+})
+
+auc_results <- sapply(new_datasets, function(dataset) {
+  model <- glm(group ~ BRD9, data = dataset, family = 'binomial')
+  prediction <- predict(model, type = "response")
+  roc_response <- roc(dataset$group, prediction)
+  auc(roc_response)
+})
+average_auc <- mean(auc_results)
+
+cutoff <- sapply(new_datasets, function(dataset) {
+  model <- glm(group ~ BRD9, data = dataset, family = 'binomial')
+  prediction <- predict(model, type = "response")
+  roc_response <- roc(dataset$group, prediction)
+  auc(roc_response)
+  coords(roc_response, "best", ret="threshold", best.method="youden")
+})
+
+average_cutoff<-mean(unlist(cutoff))
+
+
+#plot auc
+#training
+model <- glm(group ~ BRD9, data = new_datasets[[10]], family = 'binomial')
+predictions <- predict(model, type = "response")
+roc_response <- roc(new_datasets[[1]]$group, predictions)
+auc(roc_response)
+
+plot(roc_response, main="", col="#377eb8",
+     legacy.axes=TRUE,percent=TRUE,
+     xlab="1 - Specificity (False Positive Rate)", 
+     ylab="Sensitivity (True Positive Rate)",
+     print.auc=T, auc.polygon=T,max.auc.polygon=F,font.main=2,font.lab=2,colorize=TRUE)
+
+
+#validation
+validation_predictions <- predict(model, newdata = micro_BRD9,type = "response")
+validation_roc_response <- roc(micro_BRD9$group,validation_predictions)
+auc(validation_roc_response)
+coords(validation_roc_response, "best", ret="threshold", best.method="youden")
+
+plot(validation_roc_response, main="", col="#377eb8",
+     legacy.axes=TRUE,percent=TRUE,
+     xlab="1 - Specificity (False Positive Rate)", 
+     ylab="Sensitivity (True Positive Rate)",
+     print.auc=T, auc.polygon=T,max.auc.polygon=F,font.main=2,font.lab=2,colorize=TRUE)
+
+#######plot confusion matrix#########
+confusionMatrix(data=as.factor(ifelse(validation_predictions>0.526,"tumor","normal")),as.factor(micro_BRD9$group))
+table <- data.frame(confusionMatrix(data=as.factor(ifelse(validation_predictions>0.526,"tumor","normal")),as.factor(micro_BRD9$group))$table)
+
+plotTable <- table %>%
+  mutate(goodbad = ifelse(table$Prediction == table$Reference, "good", "bad")) %>%
+  group_by(Reference) %>%
+  mutate(prop = Freq/sum(Freq))
+
+# fill alpha relative to sensitivity/specificity by proportional outcomes within reference groups (see dplyr code above as well as original confusion matrix for comparison)
+ggplot(data = plotTable, mapping = aes(x = Reference, y = Prediction, fill = goodbad, alpha = prop)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), vjust = .5, fontface  = "bold", alpha = 1) +
+  scale_fill_manual(values = c(good = "#4FB6CC", bad = "#009070")) +
+  theme_bw() +
+  xlim(rev(levels(table$Reference)))
+
+
